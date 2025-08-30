@@ -177,9 +177,12 @@ namespace FamiStudio
             SelectWave,
             CreateNote,
             CreateSlideNote,
+            CreateHorizontalSlideNote,
             DeleteNotes,
             DragSlideNoteTarget,
             DragSlideNoteTargetGizmo,
+            DragHorizontalSlideNoteTarget,
+            DragHorizontalSlideNoteTargetGizmo,
             DragVolumeSlideTarget,
             DragVolumeSlideTargetGizmo,
             DragNote,
@@ -222,9 +225,12 @@ namespace FamiStudio
             ThesholdNormalMobileOnly, // SelectWave
             0,                        // CreateNote
             ThesholdNormal,           // CreateSlideNote
+            ThesholdNormal,           // CreateHorizontalSlideNote
             ThesholdNormal,           // DeleteNotes
             ThesholdNormal,           // DragSlideNoteTarget
             ThesholdNormal,           // DragSlideNoteTargetGizmo
+            ThesholdNormal,           // DragHorizontalSlideNoteTarget
+            ThesholdNormal,           // DragHorizontalSlideNoteTargetGizmo
             0,                        // DragVolumeSlideTarget
             0,                        // DragVolumeSlideTargetGizmo
             ThesholdSmall,            // DragNote
@@ -262,9 +268,12 @@ namespace FamiStudio
             true,              // SelectWave
             true,              // CreateNote
             true,              // CreateSlideNote
+            true,              // CreateHorizontalSlideNote
             Platform.IsMobile, // DeleteNotes
             true,              // DragSlideNoteTarget
             true,              // DragSlideNoteTargetGizmo
+            true,              // DragHorizontalSlideNoteTarget
+            true,              // DragHorizontalSlideNoteTargetGizmo
             false,             // DragVolumeSlideTarget
             false,             // DragVolumeSlideTargetGizmo
             true,              // DragNote
@@ -397,6 +406,7 @@ namespace FamiStudio
             ResizeNote,
             MoveRelease,
             MoveSlide,
+            MoveHorizontalSlide,
             ChangeEnvValue,
             ChangeEnvEffectValue,
             ChangeEffectValue,
@@ -2629,6 +2639,7 @@ namespace FamiStudio
                     return true;
 
                 if (g.Action == GizmoAction.MoveSlide && captureOperation == CaptureOperation.DragSlideNoteTargetGizmo ||
+                    g.Action == GizmoAction.MoveHorizontalSlide && captureOperation == CaptureOperation.DragHorizontalSlideNoteTargetGizmo ||
                     g.Action == GizmoAction.MoveVolumeSlideValue && captureOperation == CaptureOperation.DragVolumeSlideTargetGizmo)
                     return true;
             }
@@ -3379,10 +3390,12 @@ namespace FamiStudio
             {
                 // We will get zero for notes that start a slide and have an immediate delayed cut.
                 var duration = Math.Max(1, slideDuration);
-                var slideSizeX = duration;
+                var slideOffsetX = note.HorizontalSlideNoteTarget;
+                var slideStartX = GetPixelXForAbsoluteNoteIndex(time + slideOffsetX);
+                var slideSizeX = duration - slideOffsetX;
                 var slideSizeY = note.SlideNoteTarget + transpose - noteValue;
 
-                r.c.PushTransform(x, y + (slideSizeY > 0 ? 0 : noteSizeY), GetPixelXForAbsoluteNoteIndex(slideSizeX, false), -slideSizeY);
+                r.c.PushTransform(slideStartX, y + (slideSizeY > 0 ? 0 : noteSizeY), GetPixelXForAbsoluteNoteIndex(slideSizeX, false), -slideSizeY);
                 r.c.FillGeometry(slideNoteGeometry, Color.FromArgb(50, color), true);
                 r.c.PopTransform();
             }
@@ -4625,6 +4638,13 @@ namespace FamiStudio
                     case CaptureOperation.DragSlideNoteTargetGizmo:
                         UpdateSlideNoteCreation(x, y, false, true);
                         break;
+                    case CaptureOperation.CreateHorizontalSlideNote:
+                    case CaptureOperation.DragHorizontalSlideNoteTarget:
+                        UpdateHorizontalSlideNoteCreation(x, y, false);
+                        break;
+                    case CaptureOperation.DragHorizontalSlideNoteTargetGizmo:
+                        UpdateHorizontalSlideNoteCreation(x, y, false, true);
+                        break;
                     case CaptureOperation.DragVolumeSlideTarget:
                     case CaptureOperation.DragVolumeSlideTargetGizmo:
                         UpdateDragVolumeSlide(x, y, false);
@@ -4770,6 +4790,13 @@ namespace FamiStudio
                         break;
                     case CaptureOperation.DragSlideNoteTargetGizmo:
                         UpdateSlideNoteCreation(x, y, true, true);
+                        break;
+                    case CaptureOperation.CreateHorizontalSlideNote:
+                    case CaptureOperation.DragHorizontalSlideNoteTarget:
+                        UpdateHorizontalSlideNoteCreation(x, y, true);
+                        break;
+                    case CaptureOperation.DragHorizontalSlideNoteTargetGizmo:
+                        UpdateHorizontalSlideNoteCreation(x, y, true, true);
                         break;
                     case CaptureOperation.DragVolumeSlideTarget:
                     case CaptureOperation.DragVolumeSlideTargetGizmo:
@@ -5193,6 +5220,21 @@ namespace FamiStudio
                 slideGizmo.Action = GizmoAction.MoveSlide;
                 slideGizmo.Rect = new Rectangle(x, y, gizmoSize, gizmoSize);
                 slideGizmo.GizmoText = Note.GetFriendlyName(note.SlideNoteTarget);
+                list.Add(slideGizmo);
+            }
+            
+            // Horizontal slide note gizmo
+            if (note.IsSlideNote)
+            {
+                var side = note.SlideNoteTarget > note.Value ? 1 : -1;
+                var x = GetPixelXForAbsoluteNoteIndex(locationAbsIndex + note.HorizontalSlideNoteTarget) - gizmoSize / 2;
+                var y = virtualSizeY - note.Value * noteSizeY - scrollY - (note.SlideNoteTarget > note.Value ? gizmoSize + noteSizeY : -gizmoSize);
+
+                Gizmo slideGizmo = new Gizmo();
+                slideGizmo.Image = bmpGizmoResizeLeftRight;
+                slideGizmo.FillImage = bmpGizmoResizeFill;
+                slideGizmo.Action = GizmoAction.MoveHorizontalSlide;
+                slideGizmo.Rect = new Rectangle(x, y, gizmoSize, gizmoSize);
                 list.Add(slideGizmo);
             }
 
@@ -6333,6 +6375,9 @@ namespace FamiStudio
                                     break;
                                 case GizmoAction.MoveSlide:
                                     StartDragSlideNoteGizmo(x, y, gizmoNoteLocation, gizmoNote);
+                                    break;
+                                case GizmoAction.MoveHorizontalSlide:
+                                    StartDragHorizontalSlideNoteGizmo(x, y, gizmoNoteLocation, gizmoNote);
                                     break;
                             }
 
@@ -7880,6 +7925,35 @@ namespace FamiStudio
                 App.UndoRedoManager.EndTransaction();
             }
         }
+        
+        private void UpdateHorizontalSlideNoteCreation(int x, int y, bool final, bool gizmo = false) {
+            Debug.Assert(captureNoteAbsoluteIdx >= 0);
+
+            ScrollIfNearEdge(x, y, true, false);
+
+            var location = NoteLocation.FromAbsoluteNoteIndex(Song, captureNoteAbsoluteIdx);
+            var channel = Song.Channels[editChannel];
+            var pattern = channel.PatternInstances[location.PatternIndex];
+
+            if (GetLocationForCoord(x, y, out var slideLocation, out _, true))
+            {
+                var note = pattern.GetOrCreateNoteAt(location.NoteIndex);
+
+                int slidePos = slideLocation.NoteIndex - location.NoteIndex;
+                if (slidePos >= 0 && slidePos < note.Duration)
+                    note.HorizontalSlideNoteTarget = (byte)slidePos;
+
+                MarkDirty();
+            }
+
+            if (final)
+            {
+                if (captureOperation == CaptureOperation.CreateHorizontalSlideNote && !captureThresholdMet)
+                    channel.PatternInstances[location.PatternIndex].GetOrCreateNoteAt(location.NoteIndex).IsSlideNote ^= true;
+                MarkPatternDirty(location.PatternIndex);
+                App.UndoRedoManager.EndTransaction();
+            }
+        }
 
         private void StartDragSlideNoteGizmo(int x, int y, NoteLocation location, Note note)
         {
@@ -7892,6 +7966,19 @@ namespace FamiStudio
                 var offsetY = headerAndEffectSizeY + virtualSizeY - (int)((note.SlideNoteTarget - 0.5f) * noteSizeY) - scrollY - y;
                 App.UndoRedoManager.BeginTransaction(TransactionScope.Pattern, pattern.Id);
                 StartCaptureOperation(x, y, CaptureOperation.DragSlideNoteTargetGizmo, false, location.ToAbsoluteNoteIndex(Song), 0, offsetY);
+            }
+        }
+        
+        private void StartDragHorizontalSlideNoteGizmo(int x, int y, NoteLocation location, Note note) {
+            var channel = Song.Channels[editChannel];
+            var pattern = channel.PatternInstances[location.PatternIndex];
+
+            if (note != null && channel.SupportsSlideNotes)
+            {
+                // -0.5 since out note values have +1 in them (-1 + 0.5 = -0.5)
+                //var offsetY = headerAndEffectSizeY + virtualSizeY - (int)((note.SlideNoteTarget - 0.5f) * noteSizeY) - scrollY - y;
+                App.UndoRedoManager.BeginTransaction(TransactionScope.Pattern, pattern.Id);
+                StartCaptureOperation(x, y, CaptureOperation.DragHorizontalSlideNoteTargetGizmo, true, location.ToAbsoluteNoteIndex(Song), 0, 0);
             }
         }
 
@@ -9367,8 +9454,8 @@ namespace FamiStudio
                             {
                                 if (gizmo.Rect.Contains(pt.X - pianoSizeX, pt.Y - headerAndEffectSizeY))
                                 {
-                                    Debug.Assert(gizmo.Action == GizmoAction.MoveSlide);
-                                    Cursor = Cursors.SizeNS;
+                                    Debug.Assert(gizmo.Action == GizmoAction.MoveSlide || gizmo.Action == GizmoAction.MoveHorizontalSlide);
+                                    Cursor = gizmo.Action == GizmoAction.MoveSlide ? Cursors.SizeNS : Cursors.SizeWE;
                                     return;
                                 }
                             }

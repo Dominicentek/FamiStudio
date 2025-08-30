@@ -83,6 +83,7 @@ namespace FamiStudio
         private byte       val = NoteInvalid; // (0 = stop, 1 = C0 ... 96 = B7).
         private byte       flags;
         private byte       slide;
+        private byte       horizontalSlide;
         private ushort     effectMask;
         private ushort     duration;
         private ushort     release;
@@ -274,6 +275,12 @@ namespace FamiStudio
         {
             get { return slide; }
             set { slide = value; }
+        }
+        
+        public byte HorizontalSlideNoteTarget
+        {
+            get { return horizontalSlide; }
+            set { horizontalSlide = value; }
         }
 
         public bool IsArpeggio
